@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title id="pageTitle">Profile · BlazePlus</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <div class="sidebar" id="sidebar"></div>
+
+  <div class="main">
+    <div class="main-header">
+      <div>
+        <h1 id="heading">Profile</h1>
+        <div class="sub" id="subheading"></div>
+      </div>
+    </div>
+
+    <div id="msgBox"></div>
+
+    <div class="rooms-grid" style="margin-bottom:30px;" id="fieldsGrid"></div>
+
+    <div id="requestSection"></div>
+    <div id="ownProfileSection"></div>
+    <div id="backLinkSection"></div>
+  </div>
+</div>
+
+<script src="assets/js/demo.js"></script>
+<script>
+const me = Demo.requireUser();
+if (me) {
+  document.getElementById('sidebar').innerHTML = Demo.renderSidebar(me, 'profile');
+
+  const params = new URLSearchParams(location.search);
+  const viewId = params.has('id') ? parseInt(params.get('id'), 10) : me.id;
+  const isOwnProfile = viewId === me.id;
+
+  let target;
+  if (isOwnProfile) {
+    target = me;
+  } else {
+    target = Demo.getUsers().find(u => u.id === viewId);
+    const visibleRoles = me.role === 'senior' ? ['employee', 'manager', 'senior'] : ['employee', 'manager'];
+    let allowed = target && visibleRoles.includes(target.role);
+    if (allowed && me.role === 'employee' && target.role === 'manager' && target.department !== me.department) allowed = false;
+    if (!allowed) { location.href = 'index.html'; }
+  }
+
+  if (target) {
+    document.title = (isOwnProfile ? 'My Profile' : target.name) + ' · BlazePlus';
+    document.getElementById('heading').textContent = isOwnProfile ? 'My Profile' : target.name + "'s Profile";
+    document.getElementById('subheading').textContent = isOwnProfile ? 'Manage your contact info and visibility.' : 'Viewing another employee — read only.';
+
+    function showMsg(html) { document.getElementById('msgBox').innerHTML = html; }
+
+    function approvedGrants() { return Demo.approvedGrantsFor(me.id); }
+
+    function renderFields() {
+      const grants = approvedGrants();
+      const phoneVisible = Demo.fieldVisible(me, target, 'phone', grants);
+      const emailVisible = Demo.fieldVisible(me, target, 'email', grants);
+      document.getElementById('fieldsGrid').innerHTML = `
+        <div class="room-card"><div class="tag">NAME</div><h3>${Demo.escapeHtml(target.name)}</h3></div>
+        <div class="room-card"><div class="tag">EMPLOYEE NO.</div><h3 class="mono">${Demo.escapeHtml(target.emp_no)}</h3></div>
+        <div class="room-card"><div class="tag">DEPARTMENT</div><h3>${Demo.escapeHtml(target.department)}</h3></div>
+        <div class="room-card"><div class="tag">ROLE</div><h3>${target.role.charAt(0).toUpperCase() + target.role.slice(1)}</h3></div>
+        <div class="room-card"><div class="tag">PHONE</div><h3>${phoneVisible ? Demo.escapeHtml(target.phone) : 'Hidden'}</h3></div>
+        <div class="room-card"><div class="tag">EMAIL</div><h3>${emailVisible ? Demo.escapeHtml(target.email) : 'Hidden'}</h3></div>
+      `;
+      return { phoneVisible, emailVisible };
+    }
+
+    function renderRequestSection() {
+      const { phoneVisible, emailVisible } = renderFields();
+      const section = document.getElementById('requestSection');
+      if (isOwnProfile) { section.innerHTML = ''; return; }
+
+      const showRequestButton = me.role === 'employee' && ['manager', 'senior'].includes(target.role) && (!phoneVisible || !emailVisible);
+      if (!showRequestButton) { section.innerHTML = ''; return; }
+
+      const hasPending = Demo.getContactRequests().some(r => r.requester_id === me.id && r.target_id === target.id && r.status === 'pending');
+      if (hasPending) {
+        section.innerHTML = `<div class="room-card" style="max-width:420px;margin-bottom:30px;"><div class="tag">CONTACT REQUEST</div><div class="status">Your request is pending review.</div></div>`;
+      } else {
+        section.innerHTML = `
+          <div class="auth-card" style="max-width:420px;margin-bottom:30px;">
+            <h1 style="font-size:16px;">Request Contact</h1>
+            <form id="requestForm">
+              <div class="field">
+                <label>Reason for contacting ${Demo.escapeHtml(target.name)}</label>
+                <textarea name="reason" id="reasonInput" rows="3" required style="width:100%;padding:10px;border-radius:8px;border:1px solid #ccc;font:inherit;"></textarea>
+              </div>
+              <button type="submit" class="btn">Send Request</button>
+            </form>
+          </div>`;
+        document.getElementById('requestForm').addEventListener('submit', function (e) {
+          e.preventDefault();
+          const reason = document.getElementById('reasonInput').value.trim();
+          if (!reason) { showMsg('<div class="alert alert-error">Please provide a reason for your request.</div>'); return; }
+          const list = Demo.getContactRequests();
+          if (list.some(r => r.requester_id === me.id && r.target_id === target.id && r.status === 'pending')) {
+            showMsg('<div class="alert alert-error">You already have a pending request to this person.</div>');
+            return;
+          }
+          list.push({
+            id: Demo.nextId(list), requester_id: me.id, target_id: target.id, reason,
+            status: 'pending', shared_field: null, requested_at: new Date().toISOString(), decided_at: null
+          });
+          Demo.saveContactRequests(list);
+          showMsg('<div class="alert alert-ok">Your contact request has been sent.</div>');
+          renderRequestSection();
+        });
+      }
+    }
+
+    function renderOwnProfileSection() {
+      const section = document.getElementById('ownProfileSection');
+      if (!isOwnProfile) { section.innerHTML = ''; return; }
+
+      section.innerHTML = `
+        <div class="auth-card" style="max-width:480px;">
+          <h1 style="font-size:18px;">Edit Contact Info</h1>
+          <form id="editForm" novalidate>
+            <div class="field">
+              <label>Phone number</label>
+              <input type="tel" name="phone" id="phoneInput" value="${Demo.escapeHtml(target.phone)}">
+              <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:400;">
+                <input type="checkbox" id="hideContactInput" ${target.hide_contact ? 'checked' : ''} style="width:auto;">
+                Hide my phone number from same-level peers
+              </label>
+            </div>
+            <div class="field">
+              <label>Email</label>
+              <input type="email" name="email" id="emailInput" value="${Demo.escapeHtml(target.email)}">
+              <label style="display:flex;align-items:center;gap:8px;margin-top:8px;font-weight:400;">
+                <input type="checkbox" id="hideEmailInput" ${target.hide_email ? 'checked' : ''} style="width:auto;">
+                Hide my email from same-level peers
+              </label>
+            </div>
+            <button type="submit" class="btn">Save changes</button>
+          </form>
+        </div>
+        <div id="pendingRequestsSection" style="margin-top:40px;max-width:700px;"></div>
+      `;
+
+      document.getElementById('editForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        const newPhone = document.getElementById('phoneInput').value.trim();
+        const newEmail = document.getElementById('emailInput').value.trim();
+        const hideContact = document.getElementById('hideContactInput').checked ? 1 : 0;
+        const hideEmail = document.getElementById('hideEmailInput').checked ? 1 : 0;
+        const errors = [];
+
+        if (newPhone !== target.phone && !/^[0-9]{10}$/.test(newPhone)) errors.push('Enter a valid 10-digit phone number.');
+        if (newEmail !== target.email) {
+          if (!/^\S+@\S+\.\S+$/.test(newEmail)) errors.push('Enter a valid email address.');
+          else if (Demo.getUsers().some(u => u.email === newEmail && u.id !== me.id)) errors.push('That email is already in use by another account.');
+        }
+
+        if (errors.length) {
+          showMsg(errors.map(e => `<div class="alert alert-error">${Demo.escapeHtml(e)}</div>`).join(''));
+          return;
+        }
+
+        const users = Demo.getUsers();
+        const idx = users.findIndex(u => u.id === me.id);
+        users[idx] = { ...users[idx], phone: newPhone, email: newEmail, hide_contact: hideContact, hide_email: hideEmail };
+        Demo.saveUsers(users);
+        Object.assign(target, users[idx]);
+        Object.assign(me, users[idx]);
+        showMsg('<div class="alert alert-ok">Profile updated.</div>');
+        renderRequestSection();
+        renderPendingRequests();
+      });
+
+      renderPendingRequests();
+    }
+
+    function renderPendingRequests() {
+      const el = document.getElementById('pendingRequestsSection');
+      if (!el || !['manager', 'senior'].includes(me.role)) { if (el) el.innerHTML = ''; return; }
+      const pending = Demo.getContactRequests()
+        .filter(r => r.target_id === me.id && r.status === 'pending')
+        .map(r => ({ ...r, requester: Demo.getUsers().find(u => u.id === r.requester_id) }))
+        .filter(r => r.requester);
+
+      if (pending.length === 0) { el.innerHTML = ''; return; }
+
+      el.innerHTML = `
+        <h1 style="font-size:18px;">Contact Requests</h1>
+        <table class="admin-table" style="margin-top:12px;">
+          <thead><tr><th>From</th><th>Reason</th><th>Submitted</th><th>Actions</th></tr></thead>
+          <tbody>
+            ${pending.map(r => `
+              <tr>
+                <td>${Demo.escapeHtml(r.requester.name)} <span class="mono" style="color:var(--muted);">(${Demo.escapeHtml(r.requester.emp_no)})</span></td>
+                <td>${Demo.escapeHtml(r.reason)}</td>
+                <td class="mono" style="color:var(--muted);font-size:12.5px;">${Demo.fmtDateTime(r.requested_at)}</td>
+                <td>
+                  <span style="display:inline-flex;gap:6px;align-items:center;">
+                    <select id="share-${r.id}" style="padding:4px;border-radius:6px;">
+                      <option value="phone">Phone</option>
+                      <option value="email">Email</option>
+                      <option value="both">Both</option>
+                    </select>
+                    <button class="mini-btn accept" onclick="window.__approveContact(${r.id})">Approve</button>
+                    <button class="mini-btn reject" onclick="window.__declineContact(${r.id})">Decline</button>
+                  </span>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`;
+    }
+
+    window.__approveContact = function (reqId) {
+      const shareField = document.getElementById('share-' + reqId).value;
+      const list = Demo.getContactRequests();
+      const idx = list.findIndex(r => r.id === reqId);
+      if (idx === -1) return;
+      list[idx] = { ...list[idx], status: 'approved', shared_field: shareField, decided_at: new Date().toISOString() };
+      Demo.saveContactRequests(list);
+      showMsg('<div class="alert alert-ok">Request updated.</div>');
+      renderPendingRequests();
+    };
+    window.__declineContact = function (reqId) {
+      const list = Demo.getContactRequests();
+      const idx = list.findIndex(r => r.id === reqId);
+      if (idx === -1) return;
+      list[idx] = { ...list[idx], status: 'declined', decided_at: new Date().toISOString() };
+      Demo.saveContactRequests(list);
+      showMsg('<div class="alert alert-ok">Request updated.</div>');
+      renderPendingRequests();
+    };
+
+    if (!isOwnProfile) {
+      document.getElementById('backLinkSection').innerHTML = `<a href="index.html" class="btn btn-outline" style="display:inline-block;text-decoration:none;">← Back to Directory</a>`;
+    }
+
+    renderRequestSection();
+    renderOwnProfileSection();
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transfers · BlazePlus</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <div class="sidebar" id="sidebar"></div>
+
+  <div class="main">
+    <div class="main-header">
+      <div>
+        <h1>Transfers</h1>
+        <div class="sub">Request a department or role change — your admin will review it.</div>
+      </div>
+    </div>
+
+    <div class="room-card" style="max-width:420px;margin-bottom:30px;" id="currentCard"></div>
+
+    <div class="auth-card" style="max-width:480px;">
+      <h1 style="font-size:18px;">Request a transfer</h1>
+      <div id="msgBox"></div>
+      <form id="transferForm" novalidate>
+        <div class="field">
+          <label>Requested department</label>
+          <select name="requested_department" id="reqDept" required></select>
+        </div>
+        <div class="field">
+          <label>Requested role</label>
+          <select name="requested_role" id="reqRole" required>
+            <option value="employee">Employee</option>
+            <option value="manager">Manager</option>
+            <option value="senior">Senior</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Reason</label>
+          <textarea name="reason" id="reasonInput" rows="4" required style="width:100%;padding:10px;border-radius:8px;border:1px solid #ccc;font:inherit;"></textarea>
+        </div>
+        <button type="submit" class="btn">Submit request</button>
+      </form>
+    </div>
+
+    <div style="margin-top:40px;max-width:700px;">
+      <h1 style="font-size:18px;">Your requests</h1>
+      <div id="historySection"></div>
+    </div>
+  </div>
+</div>
+
+<script src="assets/js/demo.js"></script>
+<script>
+const me = Demo.requireUser();
+if (me) {
+  document.getElementById('sidebar').innerHTML = Demo.renderSidebar(me, 'transfer');
+
+  document.getElementById('currentCard').innerHTML = `
+    <div class="tag">CURRENT</div>
+    <div class="row"><span class="k">Department</span> ${Demo.escapeHtml(me.department)}</div>
+    <div class="row"><span class="k">Role</span> ${me.role.charAt(0).toUpperCase() + me.role.slice(1)}</div>`;
+
+  const deptSelect = document.getElementById('reqDept');
+  Demo.DEPARTMENTS.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d; opt.textContent = d;
+    if (d === me.department) opt.selected = true;
+    deptSelect.appendChild(opt);
+  });
+  document.getElementById('reqRole').value = me.role;
+
+  function renderHistory() {
+    const history = Demo.getTransfers().filter(t => t.user_id === me.id).sort((a, b) => new Date(b.requested_at) - new Date(a.requested_at));
+    const el = document.getElementById('historySection');
+    if (history.length === 0) {
+      el.innerHTML = '<div class="sub" style="margin-top:8px;">You haven\'t submitted any transfer requests yet.</div>';
+      return;
+    }
+    el.innerHTML = `
+      <table class="admin-table" style="margin-top:12px;">
+        <thead><tr><th>Requested Dept</th><th>Requested Role</th><th>Reason</th><th>Status</th><th>Submitted</th></tr></thead>
+        <tbody>
+          ${history.map(h => `
+            <tr>
+              <td>${Demo.escapeHtml(h.requested_department)}</td>
+              <td>${h.requested_role.charAt(0).toUpperCase() + h.requested_role.slice(1)}</td>
+              <td>${Demo.escapeHtml(h.reason)}</td>
+              <td><span class="pill" style="${h.status === 'approved' ? 'background:#DCEEE4;color:#1E6B4A;' : h.status === 'rejected' ? 'background:#F7DADA;color:#A32B2B;' : ''}">${h.status.charAt(0).toUpperCase() + h.status.slice(1)}</span></td>
+              <td class="mono" style="color:var(--muted);font-size:12.5px;">${Demo.fmtDateTime(h.requested_at)}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }
+  renderHistory();
+
+  document.getElementById('transferForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+    const reqDept = deptSelect.value;
+    const reqRole = document.getElementById('reqRole').value;
+    const reason = document.getElementById('reasonInput').value.trim();
+    const errors = [];
+
+    if (!Demo.DEPARTMENTS.includes(reqDept)) errors.push('Select a valid department.');
+    if (!['employee', 'manager', 'senior'].includes(reqRole)) errors.push('Select a valid role.');
+    if (!reason) errors.push('Please provide a reason for this transfer request.');
+
+    const msgBox = document.getElementById('msgBox');
+    if (errors.length) {
+      msgBox.innerHTML = errors.map(e => `<div class="alert alert-error">${Demo.escapeHtml(e)}</div>`).join('');
+      return;
+    }
+
+    const list = Demo.getTransfers();
+    list.push({
+      id: Demo.nextId(list), user_id: me.id, name: me.name, emp_no: me.emp_no,
+      current_department: me.department, current_role: me.role,
+      requested_department: reqDept, requested_role: reqRole, reason,
+      status: 'pending', requested_at: new Date().toISOString()
+    });
+    Demo.saveTransfers(list);
+    msgBox.innerHTML = '<div class="alert alert-ok">Your transfer request has been submitted for admin review.</div>';
+    document.getElementById('reasonInput').value = '';
+    renderHistory();
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Awaiting Verification · BlazePlus</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div class="wait-shell">
+  <div class="tag mono" style="color:var(--muted);font-size:12px;letter-spacing:.08em;">REVIEW QUEUE</div>
+  <h1 style="margin-top:8px;" id="heading">You're in the queue</h1>
+  <p class="status-note">
+    An admin needs to confirm your details before you can access the directory. In the real app this can take a while —
+    for this demo, we auto-approve you shortly, or you can open the
+    <a href="admin/login.html" target="_blank">Admin Dashboard</a> yourself (user <span class="mono">admin</span> / pass <span class="mono">Admin@123</span>)
+    and accept/reject the request from there.
+  </p>
+
+  <div class="pipeline">
+    <div class="pipe-step">
+      <div class="pipe-dot done"></div>
+      <div class="pipe-label">SIGNED UP</div>
+    </div>
+    <div class="pipe-line done"></div>
+    <div class="pipe-step">
+      <div class="pipe-dot done"></div>
+      <div class="pipe-label">DETAILS SENT</div>
+    </div>
+    <div class="pipe-line" id="line2"></div>
+    <div class="pipe-step">
+      <div class="pipe-dot active" id="dot3"></div>
+      <div class="pipe-label">ADMIN REVIEW</div>
+    </div>
+    <div class="pipe-line"></div>
+    <div class="pipe-step">
+      <div class="pipe-dot" id="dot4"></div>
+      <div class="pipe-label">ACCESS GRANTED</div>
+    </div>
+  </div>
+
+  <div class="timer-label">TIME REMAINING (DEMO WINDOW)</div>
+  <div class="timer mono" id="timer">--:--</div>
+
+  <div id="statusMsg" style="margin-top:24px;"></div>
+</div>
+
+<script src="assets/js/demo.js"></script>
+<script>
+const VERIFY_TIMEOUT_SECONDS = 90;   // shortened for demo purposes (spec: 5 min in the real app)
+const AUTO_APPROVE_AFTER_SECONDS = 18; // simulates an admin reviewing quickly
+
+const row = Demo.requireUnverified();
+if (row) {
+  if (!row.verify_submitted_at) {
+    location.href = 'verify.html';
+  } else {
+    document.getElementById('heading').textContent = "You're in the queue, " + row.name;
+    const submittedAt = new Date(row.verify_submitted_at).getTime();
+    const deadline = submittedAt + VERIFY_TIMEOUT_SECONDS * 1000;
+    const autoApproveAt = submittedAt + AUTO_APPROVE_AFTER_SECONDS * 1000;
+    let settled = false;
+
+    function tick() {
+      const remaining = deadline - Date.now();
+      const timerEl = document.getElementById('timer');
+      if (remaining <= 0) { timerEl.textContent = '00:00'; return; }
+      const mins = Math.floor(remaining / 60000);
+      const secs = Math.floor((remaining % 60000) / 1000);
+      timerEl.textContent = String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+    }
+    tick();
+    setInterval(tick, 1000);
+
+    function autoApproveIfDue() {
+      if (settled) return;
+      if (Date.now() < autoApproveAt) return;
+      const list = Demo.getUnverified();
+      const stillThere = list.find(u => u.id === row.id);
+      if (!stillThere) return; // admin already acted on it
+      approve(stillThere);
+    }
+
+    function approve(unverifiedRow) {
+      settled = true;
+      const users = Demo.getUsers();
+      const newUser = {
+        id: Demo.nextId(users),
+        name: unverifiedRow.name, email: unverifiedRow.email, phone: unverifiedRow.phone,
+        password: unverifiedRow.password, emp_no: unverifiedRow.emp_no, dob: unverifiedRow.dob,
+        department: unverifiedRow.department, role: unverifiedRow.role,
+        hide_contact: 0, hide_email: 0
+      };
+      users.push(newUser);
+      Demo.saveUsers(users);
+      Demo.saveUnverified(Demo.getUnverified().filter(u => u.id !== unverifiedRow.id));
+      Demo.setSession({ type: 'user', userId: newUser.id });
+
+      document.getElementById('dot3').classList.add('done');
+      document.getElementById('dot3').classList.remove('active');
+      document.getElementById('dot4').classList.add('active');
+      document.getElementById('statusMsg').innerHTML = '<div class="alert alert-ok">Verified! Redirecting to your directory…</div>';
+      setTimeout(() => location.href = 'index.html', 1200);
+    }
+
+    function poll() {
+      if (settled) return;
+      autoApproveIfDue();
+      if (settled) return;
+
+      const stillUnverified = Demo.getUnverified().find(u => u.id === row.id);
+      if (stillUnverified) {
+        if (Date.now() > deadline) {
+          Demo.saveUnverified(Demo.getUnverified().filter(u => u.id !== row.id));
+          Demo.clearSession();
+          settled = true;
+          document.getElementById('statusMsg').innerHTML = '<div class="alert alert-error">Your review window expired. Please sign up again.</div>';
+          setTimeout(() => location.href = 'signup.html', 3000);
+        }
+        return; // still pending
+      }
+
+      // No longer in the unverified table — check if it was approved or rejected
+      const approvedUser = Demo.getUsers().find(u => u.email === row.email);
+      if (approvedUser) {
+        settled = true;
+        Demo.setSession({ type: 'user', userId: approvedUser.id });
+        document.getElementById('dot3').classList.add('done');
+        document.getElementById('dot3').classList.remove('active');
+        document.getElementById('dot4').classList.add('active');
+        document.getElementById('statusMsg').innerHTML = '<div class="alert alert-ok">Verified! Redirecting to your directory…</div>';
+        setTimeout(() => location.href = 'index.html', 1200);
+        return;
+      }
+      const bannedRow = Demo.getBanned().find(b => b.email === row.email);
+      if (bannedRow) {
+        settled = true;
+        document.getElementById('statusMsg').innerHTML = '<div class="alert alert-error">Your request was declined: ' + Demo.escapeHtml(bannedRow.reason) + '. Contact xyz@gmail.com for details.</div>';
+        Demo.clearSession();
+        setTimeout(() => location.href = 'login.html', 3500);
+      }
+    }
+    poll();
+    setInterval(poll, 1500);
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Log In · BlazePlus</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div class="auth-shell">
+  <div class="auth-side">
+    <div class="brand">Blaze<span>Plus</span></div>
+    <div class="pitch">
+      <h2>Welcome back.</h2>
+      <p>Pick up where you left off — whether that's finishing verification or jumping into your directory.</p>
+    </div>
+    <div class="badge-strip">
+      <span>DIRECTORY</span>
+      <span>·</span>
+      <span>DEPT ROOMS</span>
+      <span>·</span>
+      <span>VERIFIED ACCESS</span>
+    </div>
+  </div>
+  <div class="auth-form-wrap">
+    <div class="auth-card">
+      <h1>Log in</h1>
+      <p class="sub">Enter your credentials to continue.</p>
+
+      <div class="demo-banner">
+        <b>This is a static portfolio demo</b> — no real backend. Try a role instantly below,
+        or sign up to walk through the full verification flow.<br>
+        Admin console: <a href="admin/login.html">admin/login.html</a> (user <code>admin</code> / pass <code>Admin@123</code>).<br>
+        Curious what a banned login looks like? Try <code>banned.demo@blazeplus.demo</code> / <code>demo123</code>.
+      </div>
+
+      <div class="quick-logins">
+        <button type="button" class="quick-login-btn" data-email="riya.nair@blazeplus.demo">Log in as Employee</button>
+        <button type="button" class="quick-login-btn" data-email="karan.mehta@blazeplus.demo">Log in as Manager</button>
+        <button type="button" class="quick-login-btn" data-email="rajesh.kumar@blazeplus.demo">Log in as Senior</button>
+      </div>
+      <div class="divider-text">— or use a specific account (all demo passwords are <span class="mono">demo123</span>) —</div>
+
+      <div id="successBox"></div>
+      <div id="errorBox"></div>
+
+      <form id="loginForm" novalidate>
+        <div class="field">
+          <label>Email</label>
+          <input type="email" name="email" id="email" required>
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" name="password" id="password" required>
+        </div>
+        <button type="submit" class="btn">Log in</button>
+      </form>
+      <p class="foot-link">New here? <a href="signup.html">Create an account</a></p>
+      <p class="foot-link"><a href="admin/login.html">Admin login →</a></p>
+      <p class="foot-link"><button class="reset-link" onclick="Demo.resetAll(); location.reload();">Reset demo data</button></p>
+    </div>
+  </div>
+</div>
+
+<script src="assets/js/demo.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+if (params.get('signup') === 'success') {
+  document.getElementById('successBox').innerHTML = '<div class="alert alert-ok">Account created. Log in to continue with verification.</div>';
+}
+
+document.querySelectorAll('.quick-login-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.getElementById('email').value = btn.dataset.email;
+    document.getElementById('password').value = 'demo123';
+    document.getElementById('loginForm').dispatchEvent(new Event('submit', { cancelable: true }));
+  });
+});
+
+document.getElementById('loginForm').addEventListener('submit', function (e) {
+  e.preventDefault();
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const errorBox = document.getElementById('errorBox');
+  errorBox.innerHTML = '';
+
+  if (!email || !password) {
+    errorBox.innerHTML = '<div class="alert alert-error">Enter both email and password.</div>';
+    return;
+  }
+
+  const bannedRow = Demo.getBanned().find(b => b.email === email);
+  if (bannedRow) {
+    errorBox.innerHTML = '<div class="alert alert-error">You are banned. Please contact xyz@gmail.com for more details.</div>';
+    return;
+  }
+
+  const user = Demo.getUsers().find(u => u.email === email && u.password === password);
+  if (user) {
+    Demo.setSession({ type: 'user', userId: user.id });
+    location.href = 'index.html';
+    return;
+  }
+
+  const unverifiedRow = Demo.getUnverified().find(u => u.email === email && u.password === password);
+  if (unverifiedRow) {
+    Demo.setSession({ type: 'unverified', unverifiedId: unverifiedRow.id, checkEmail: email });
+    location.href = unverifiedRow.emp_no === null || unverifiedRow.emp_no === undefined ? 'verify.html' : 'waiting.html';
+    return;
+  }
+
+  errorBox.innerHTML = '<div class="alert alert-error">Incorrect email or password.</div>';
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Directory · BlazePlus</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <div class="sidebar" id="sidebar"></div>
+
+  <div class="main">
+    <div class="main-header">
+      <div>
+        <h1 id="directory">Employee Directory</h1>
+        <div class="sub">You're viewing as <span id="roleLabel"></span> — <span id="visibleCount">0</span> people visible to you.</div>
+      </div>
+    </div>
+
+    <div class="filters-bar" style="display:flex;gap:10px;margin-bottom:20px;">
+      <input type="text" class="search-bar" id="searchInput" placeholder="Search by name or department…" style="flex:1;margin-bottom:0;">
+      <select id="deptFilter" class="search-bar" style="width:180px;margin-bottom:0;">
+        <option value="">All departments</option>
+      </select>
+      <select id="roleFilter" class="search-bar" style="width:160px;margin-bottom:0;">
+        <option value="">All roles</option>
+      </select>
+    </div>
+
+    <div class="directory-grid" id="grid"></div>
+  </div>
+</div>
+
+<script src="assets/js/demo.js"></script>
+<script>
+const me = Demo.requireUser();
+if (me) {
+  document.getElementById('sidebar').innerHTML = Demo.renderSidebar(me, 'index');
+  document.getElementById('roleLabel').textContent = me.role.charAt(0).toUpperCase() + me.role.slice(1);
+
+  const employees = Demo.visibleEmployeesFor(me);
+  const approvedGrants = Demo.approvedGrantsFor(me.id);
+
+  const deptOptions = [...new Set(employees.map(e => e.department))].sort();
+  const roleOptions = [...new Set(employees.map(e => e.role))];
+  const deptFilter = document.getElementById('deptFilter');
+  deptOptions.forEach(d => {
+    const opt = document.createElement('option');
+    opt.value = d.toLowerCase(); opt.textContent = d;
+    deptFilter.appendChild(opt);
+  });
+  const roleFilter = document.getElementById('roleFilter');
+  roleOptions.forEach(r => {
+    const opt = document.createElement('option');
+    opt.value = r; opt.textContent = r.charAt(0).toUpperCase() + r.slice(1);
+    roleFilter.appendChild(opt);
+  });
+
+  const grid = document.getElementById('grid');
+  grid.innerHTML = employees.map(emp => {
+    const canSeePhone = Demo.fieldVisible(me, emp, 'phone', approvedGrants);
+    return `
+      <div class="id-card" data-name="${Demo.escapeHtml(emp.name.toLowerCase())}" data-dept="${Demo.escapeHtml(emp.department.toLowerCase())}" data-role="${emp.role}">
+        <div class="card-role">${emp.role.charAt(0).toUpperCase() + emp.role.slice(1)}</div>
+        <h3>${Demo.escapeHtml(emp.name)}${emp.id === me.id ? ' (You)' : ''}</h3>
+        <div class="dept">${Demo.escapeHtml(emp.department)}</div>
+        <div class="row"><span class="k">ID</span> ${Demo.escapeHtml(emp.emp_no)}</div>
+        ${canSeePhone
+          ? `<div class="row"><span class="k">Phone</span> ${Demo.escapeHtml(emp.phone)}</div>`
+          : `<div class="row locked">Contact hidden</div>`}
+        <a href="profile.html?id=${emp.id}" class="view-link">View details →</a>
+      </div>`;
+  }).join('');
+
+  document.getElementById('visibleCount').textContent = employees.length;
+
+  function applyFilters() {
+    const q = document.getElementById('searchInput').value.toLowerCase();
+    const dept = deptFilter.value;
+    const role = roleFilter.value;
+    let visible = 0;
+    grid.querySelectorAll('.id-card').forEach(card => {
+      const matchesSearch = card.dataset.name.includes(q) || card.dataset.dept.includes(q);
+      const matchesDept = !dept || card.dataset.dept === dept;
+      const matchesRole = !role || card.dataset.role === role;
+      const show = matchesSearch && matchesDept && matchesRole;
+      card.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+    document.getElementById('visibleCount').textContent = visible;
+  }
+  document.getElementById('searchInput').addEventListener('input', applyFilters);
+  deptFilter.addEventListener('change', applyFilters);
+  roleFilter.addEventListener('change', applyFilters);
+}
+</script>
+</body>
+</html>

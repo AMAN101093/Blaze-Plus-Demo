@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign Up · BlazePlus</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div class="auth-shell">
+  <div class="auth-side">
+    <div class="brand">Blaze<span>Plus</span></div>
+    <div class="pitch">
+      <h2>The employee directory your company was missing.</h2>
+      <p>No more "contact xyz for his number." Search, connect, and know who's who — verified by your admin, visible on your terms.</p>
+    </div>
+    <div class="badge-strip">
+      <span>DIRECTORY</span>
+      <span>·</span>
+      <span>DEPT ROOMS</span>
+      <span>·</span>
+      <span>VERIFIED ACCESS</span>
+    </div>
+  </div>
+  <div class="auth-form-wrap">
+    <div class="auth-card">
+      <h1>Create your account</h1>
+      <p class="sub">Step 1 of 2 — after this you'll confirm your employee details.</p>
+
+      <div id="errorBox"></div>
+
+      <form id="signupForm" novalidate>
+        <div class="field">
+          <label>Full name</label>
+          <input type="text" name="name" id="name" required>
+        </div>
+        <div class="field">
+          <label>Email</label>
+          <input type="email" name="email" id="email" required>
+        </div>
+        <div class="field">
+          <label>Phone number</label>
+          <input type="tel" name="phone" id="phone" placeholder="10 digit number" required>
+        </div>
+        <div class="field-row">
+          <div class="field">
+            <label>Password</label>
+            <input type="password" name="password" id="password" required>
+          </div>
+          <div class="field">
+            <label>Confirm password</label>
+            <input type="password" name="confirm_password" id="confirm_password" required>
+          </div>
+        </div>
+        <button type="submit" class="btn">Create account</button>
+      </form>
+      <p class="foot-link">Already have an account? <a href="login.html">Log in</a></p>
+    </div>
+  </div>
+</div>
+
+<script src="assets/js/demo.js"></script>
+<script>
+document.getElementById('signupForm').addEventListener('submit', function (e) {
+  e.preventDefault();
+  const name = document.getElementById('name').value.trim();
+  const email = document.getElementById('email').value.trim();
+  const phone = document.getElementById('phone').value.trim();
+  const password = document.getElementById('password').value;
+  const confirm = document.getElementById('confirm_password').value;
+  const errors = [];
+
+  if (!name || !email || !phone || !password || !confirm) errors.push('Please fill in all fields.');
+  if (!/^\S+@\S+\.\S+$/.test(email)) errors.push('Enter a valid email address.');
+  if (!/^[0-9]{10}$/.test(phone)) errors.push('Enter a valid 10-digit phone number.');
+  if (password !== confirm) errors.push('Passwords do not match.');
+  if (password.length < 6) errors.push('Password must be at least 6 characters.');
+
+  if (errors.length === 0) {
+    const exists = Demo.getUnverified().some(u => u.email === email) || Demo.getUsers().some(u => u.email === email);
+    if (exists) errors.push('An account with this email already exists.');
+  }
+
+  const errorBox = document.getElementById('errorBox');
+  if (errors.length) {
+    errorBox.innerHTML = errors.map(e => `<div class="alert alert-error">${Demo.escapeHtml(e)}</div>`).join('');
+    return;
+  }
+
+  const unverified = Demo.getUnverified();
+  const newRow = {
+    id: Demo.nextId(unverified.concat(Demo.getUsers())),
+    name, email, phone, password,
+    emp_no: null, dob: null, department: null, role: null,
+    verify_submitted_at: null
+  };
+  unverified.push(newRow);
+  Demo.saveUnverified(unverified);
+
+  location.href = 'login.html?signup=success';
+});
+</script>
+</body>
+</html>

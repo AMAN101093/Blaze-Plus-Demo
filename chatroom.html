@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title id="pageTitle">Chat · BlazePlus</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <div class="sidebar" id="sidebar"></div>
+
+  <div class="main" style="display:flex;flex-direction:column;height:100vh;box-sizing:border-box;">
+    <div class="main-header" style="flex:0 0 auto;">
+      <div>
+        <h1 id="roomTitle">#room</h1>
+        <div class="sub">Messages here are part of the live demo — they reset the moment you refresh this page.</div>
+      </div>
+    </div>
+
+    <div id="sendError"></div>
+
+    <div id="chatBox" style="flex:1 1 auto;min-height:0;height:80vh;width:100%;overflow-y:auto;border:1px solid #ddd;border-radius:10px;padding:16px;margin-bottom:12px;background:#fff;box-sizing:border-box;"></div>
+
+    <form id="chatForm" style="flex:0 0 auto;width:100%;box-sizing:border-box;">
+      <div style="display:flex;gap:10px;align-items:center;">
+        <input type="text" name="message" id="messageInput" placeholder="Type a message… (max 50 words)"
+               style="flex:1 1 auto;width:100%;min-width:0;box-sizing:border-box;padding:14px 16px;border-radius:8px;border:1px solid #ccc;font:inherit;font-size:15px;">
+        <input type="file" name="image" id="imageInput" accept="image/*" style="flex:0 0 auto;">
+        <button type="submit" class="btn" style="flex:0 0 auto;white-space:nowrap;padding:6px 10px;font-size:12px;min-width:0;width:auto;">Send</button>
+      </div>
+    </form>
+    <div id="wordCount" class="word-count">0 / 50 words</div>
+  </div>
+</div>
+
+<script src="assets/js/demo.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const roomKey = params.get('room');
+const roomDept = params.get('dept') || null;
+const MAX_WORDS = 50;
+
+const me = Demo.requireUser();
+if (me) {
+  if (roomKey !== 'general' && me.department !== roomDept) {
+    location.href = 'index.html';
+  } else {
+    document.getElementById('sidebar').innerHTML = Demo.renderSidebar(me, roomKey + '.html');
+    document.title = '#' + roomKey + ' · BlazePlus';
+    document.getElementById('roomTitle').textContent = '#' + roomKey;
+
+    // In-memory only — never written to storage, so a refresh wipes this array.
+    let messages = Demo.seedChatMessages(roomKey);
+
+    const chatBox = document.getElementById('chatBox');
+    const form = document.getElementById('chatForm');
+    const messageInput = document.getElementById('messageInput');
+    const imageInput = document.getElementById('imageInput');
+    const wordCountEl = document.getElementById('wordCount');
+    const errorBox = document.getElementById('sendError');
+
+    function countWords(text) {
+      const t = text.trim();
+      return t === '' ? 0 : t.split(/\s+/).length;
+    }
+    messageInput.addEventListener('input', () => {
+      const words = messageInput.value.trim().split(/\s+/).filter(Boolean);
+      if (words.length > MAX_WORDS) messageInput.value = words.slice(0, MAX_WORDS).join(' ');
+      wordCountEl.textContent = countWords(messageInput.value) + ' / ' + MAX_WORDS + ' words';
+    });
+
+    function renderMessages() {
+      if (messages.length === 0) {
+        chatBox.innerHTML = '<div class="chat-empty">No messages yet — say hello.</div>';
+        return;
+      }
+      chatBox.innerHTML = messages.map(m => {
+        let html = '<div class="chat-msg-row">';
+        html += '<div style="font-size:13px;color:var(--muted);"><strong>' + Demo.escapeHtml(m.name) + '</strong>';
+        html += ' <span class="mono">(' + Demo.escapeHtml(m.emp_no) + ')</span> · ' + Demo.escapeHtml(m.created_at) + '</div>';
+        if (m.message) html += '<div>' + Demo.escapeHtml(m.message).replace(/\n/g, '<br>') + '</div>';
+        if (m.image_path) html += '<img src="' + m.image_path + '" style="max-width:260px;border-radius:8px;margin-top:6px;">';
+        if (m.user_id !== me.id) html += '<a href="#" onclick="reportMessage(\'' + m.id + '\'); return false;" style="font-size:11px;color:#B23B3B;">Report</a>';
+        html += '</div>';
+        return html;
+      }).join('');
+    }
+    renderMessages();
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    window.reportMessage = function (id) {
+      const msg = messages.find(m => m.id === id || String(m.id) === id);
+      if (!msg) return;
+      const reason = prompt('Why are you reporting this message?');
+      if (reason === null) return;
+      if (reason.trim() === '') { alert('A reason is required.'); return; }
+
+      const complaints = Demo.getComplaints();
+      complaints.push({
+        id: Demo.nextId(complaints),
+        message_type: 'chat',
+        room_key: roomKey,
+        reporter_id: me.id,
+        reported_user_id: msg.user_id,
+        reporter_name: me.name,
+        reporter_emp_no: me.emp_no,
+        reported_name: msg.name,
+        reported_emp_no: msg.emp_no,
+        message_text: msg.message,
+        image_path: msg.image_path,
+        pdf_path: null,
+        reason: reason.trim(),
+        status: 'open',
+        reported_at: new Date().toISOString()
+      });
+      Demo.saveComplaints(complaints);
+      alert('Message reported. Admin will review it.');
+    };
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      errorBox.innerHTML = '';
+      const text = messageInput.value.trim();
+      const wordCount = text === '' ? 0 : text.split(/\s+/).length;
+
+      if (wordCount > MAX_WORDS) {
+        errorBox.innerHTML = '<div class="alert alert-error">Message exceeds the ' + MAX_WORDS + '-word limit.</div>';
+        return;
+      }
+
+      const file = imageInput.files[0];
+      function finishSend(imageDataUrl) {
+        if (text === '' && !imageDataUrl) {
+          errorBox.innerHTML = '<div class="alert alert-error">Message cannot be empty.</div>';
+          return;
+        }
+        messages.push({
+          id: 'live-' + Date.now(),
+          user_id: me.id, name: me.name, emp_no: me.emp_no, role: me.role,
+          message: text, image_path: imageDataUrl || null,
+          created_at: new Date().toLocaleString('en-IN')
+        });
+        messageInput.value = '';
+        imageInput.value = '';
+        wordCountEl.textContent = '0 / 50 words';
+        renderMessages();
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }
+
+      if (file) {
+        if (!file.type.startsWith('image/')) {
+          errorBox.innerHTML = '<div class="alert alert-error">Only image files (JPG, PNG, GIF, WEBP) are allowed.</div>';
+          return;
+        }
+        if (file.size > 2 * 1024 * 1024) {
+          errorBox.innerHTML = '<div class="alert alert-error">Image must be 2MB or smaller.</div>';
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => finishSend(reader.result);
+        reader.readAsDataURL(file);
+      } else {
+        finishSend(null);
+      }
+    });
+  }
+}
+</script>
+</body>
+</html>

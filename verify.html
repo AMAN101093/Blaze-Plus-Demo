@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verify Details · BlazePlus</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div class="auth-shell">
+  <div class="auth-side">
+    <div class="brand">Blaze<span>Plus</span></div>
+    <div class="pitch">
+      <h2 id="greeting">Let's confirm who you are.</h2>
+      <p>This information goes straight to your admin for review — it's what lets them verify you belong here.</p>
+    </div>
+    <div class="badge-strip">
+      <span>STEP 2 OF 2</span>
+    </div>
+  </div>
+  <div class="auth-form-wrap">
+    <div class="auth-card">
+      <h1>Confirm your details</h1>
+      <p class="sub">Once submitted, your account enters the review queue.</p>
+
+      <div id="errorBox"></div>
+
+      <form id="verifyForm" novalidate>
+        <div class="field">
+          <label>Employee number</label>
+          <input type="text" name="emp_no" id="emp_no" required>
+        </div>
+        <div class="field">
+          <label>Date of birth</label>
+          <input type="date" name="dob" id="dob" required>
+        </div>
+        <div class="field">
+          <label>Department</label>
+          <select name="department" id="department" required>
+            <option value="">Select department</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Role</label>
+          <select name="role" id="role" required>
+            <option value="">Select role</option>
+            <option value="employee">Employee</option>
+            <option value="manager">Manager</option>
+            <option value="senior">Senior</option>
+          </select>
+        </div>
+        <p class="sub" style="margin:-6px 0 16px;">Note: department and role can't be changed later — they set which chat rooms you belong to.</p>
+        <button type="submit" class="btn">Submit for review</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="assets/js/demo.js"></script>
+<script>
+const row = Demo.requireUnverified();
+if (row) {
+  if (row.emp_no) {
+    location.href = 'waiting.html';
+  } else {
+    document.getElementById('greeting').textContent = 'Hey ' + row.name + ', let\'s confirm who you are.';
+    const deptSelect = document.getElementById('department');
+    Demo.DEPARTMENTS.forEach(d => {
+      const opt = document.createElement('option');
+      opt.value = d; opt.textContent = d;
+      deptSelect.appendChild(opt);
+    });
+
+    document.getElementById('verifyForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      const emp_no = document.getElementById('emp_no').value.trim();
+      const dob = document.getElementById('dob').value;
+      const department = document.getElementById('department').value;
+      const role = document.getElementById('role').value;
+      const errors = [];
+
+      if (!emp_no || !dob || !department || !role) errors.push('Please fill in all fields.');
+      if (!['employee', 'manager', 'senior'].includes(role)) errors.push('Select a valid role.');
+      if (!Demo.DEPARTMENTS.includes(department)) errors.push('Select a valid department.');
+
+      const errorBox = document.getElementById('errorBox');
+      if (errors.length) {
+        errorBox.innerHTML = errors.map(e => `<div class="alert alert-error">${Demo.escapeHtml(e)}</div>`).join('');
+        return;
+      }
+
+      const list = Demo.getUnverified();
+      const idx = list.findIndex(u => u.id === row.id);
+      list[idx] = { ...list[idx], emp_no, dob, department, role, verify_submitted_at: new Date().toISOString() };
+      Demo.saveUnverified(list);
+
+      location.href = 'waiting.html';
+    });
+  }
+}
+</script>
+</body>
+</html>
