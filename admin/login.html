@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Login · BlazePlus</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<div class="auth-shell">
+  <div class="auth-side">
+    <div class="brand">Blaze<span>Plus</span></div>
+    <div class="pitch">
+      <h2>Admin console</h2>
+      <p>Review the queue, verify identities, and manage access. No restrictions here.</p>
+    </div>
+    <div class="badge-strip"><span>ADMIN ACCESS</span></div>
+  </div>
+  <div class="auth-form-wrap">
+    <div class="auth-card">
+      <h1>Admin log in</h1>
+      <p class="sub">This is a separate login from regular employee accounts.</p>
+
+      <div class="demo-banner">Demo credentials: <span class="mono">admin</span> / <span class="mono">Admin@123</span></div>
+
+      <div id="errorBox"></div>
+
+      <form id="loginForm" novalidate>
+        <div class="field">
+          <label>Username</label>
+          <input type="text" name="username" id="username" required>
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" name="password" id="password" required>
+        </div>
+        <button type="submit" class="btn">Log in</button>
+      </form>
+      <p class="foot-link"><a href="../login.html">← Back to employee login</a></p>
+    </div>
+  </div>
+</div>
+
+<script src="../assets/js/demo.js"></script>
+<script>
+document.getElementById('loginForm').addEventListener('submit', function (e) {
+  e.preventDefault();
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  if (username === Demo.ADMIN.username && password === Demo.ADMIN.password) {
+    Demo.setAdminSession({ name: Demo.ADMIN.name });
+    location.href = 'dashboard.html';
+  } else {
+    document.getElementById('errorBox').innerHTML = '<div class="alert alert-error">Invalid admin credentials.</div>';
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transfer Requests · BlazePlus Admin</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <div class="sidebar" id="sidebar"></div>
+  <div class="main">
+    <div class="main-header">
+      <div>
+        <h1>Transfer Requests</h1>
+        <div class="sub" id="subheading"></div>
+      </div>
+    </div>
+    <div id="tableArea"></div>
+  </div>
+</div>
+
+<script src="../assets/js/demo.js"></script>
+<script>
+const admin = Demo.requireAdmin();
+if (admin) {
+  document.getElementById('sidebar').innerHTML = Demo.renderAdminSidebar(admin.name, 'tverify.html');
+
+  function render() {
+    const queue = Demo.getTransfers().filter(t => t.status === 'pending').sort((a, b) => new Date(a.requested_at) - new Date(b.requested_at));
+    document.getElementById('subheading').textContent = `${queue.length} request${queue.length === 1 ? '' : 's'} waiting on your decision.`;
+
+    const area = document.getElementById('tableArea');
+    if (queue.length === 0) {
+      area.innerHTML = '<div class="empty-note">Nothing to review right now.</div>';
+      return;
+    }
+    area.innerHTML = `
+      <table class="admin-table">
+        <thead><tr><th>Name</th><th>Current</th><th>Requested</th><th>Reason</th><th>Submitted</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${queue.map(q => `
+            <tr>
+              <td>${Demo.escapeHtml(q.name)} <span class="mono" style="color:var(--muted);">(${Demo.escapeHtml(q.emp_no)})</span></td>
+              <td>${Demo.escapeHtml(q.current_department)} · ${q.current_role.charAt(0).toUpperCase() + q.current_role.slice(1)}</td>
+              <td>${Demo.escapeHtml(q.requested_department)} · ${q.requested_role.charAt(0).toUpperCase() + q.requested_role.slice(1)}</td>
+              <td>${Demo.escapeHtml(q.reason)}</td>
+              <td class="mono" style="color:var(--muted);font-size:12.5px;">${Demo.fmtDateTime(q.requested_at)}</td>
+              <td>
+                <button class="mini-btn accept" onclick="doAction(${q.id}, 'accept')">Accept</button>
+                <button class="mini-btn reject" onclick="doAction(${q.id}, 'reject')">Reject</button>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }
+  render();
+
+  window.doAction = function (id, action) {
+    const confirmMsg = action === 'accept'
+      ? "Approve this transfer? The user's department/role will be updated immediately."
+      : 'Reject this transfer request?';
+    if (!confirm(confirmMsg)) return;
+
+    const list = Demo.getTransfers();
+    const idx = list.findIndex(t => t.id === id && t.status === 'pending');
+    if (idx === -1) { alert('Request not found.'); return; }
+    const row = list[idx];
+
+    if (action === 'accept') {
+      const users = Demo.getUsers();
+      const uidx = users.findIndex(u => u.id === row.user_id);
+      if (uidx !== -1) {
+        users[uidx] = { ...users[uidx], department: row.requested_department, role: row.requested_role };
+        Demo.saveUsers(users);
+      }
+      list[idx] = { ...row, status: 'approved' };
+    } else {
+      list[idx] = { ...row, status: 'rejected' };
+    }
+    Demo.saveTransfers(list);
+    render();
+  };
+}
+</script>
+</body>
+</html>

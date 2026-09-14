@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Dashboard · BlazePlus</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <div class="sidebar" id="sidebar"></div>
+  <div class="main">
+    <div class="main-header">
+      <div>
+        <h1>Review Queue</h1>
+        <div class="sub" id="subheading"></div>
+      </div>
+    </div>
+    <div id="tableArea"></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <h3>Full details</h3>
+    <div id="modalBody"></div>
+    <button class="btn btn-outline modal-close" onclick="closeModal()">Close</button>
+  </div>
+</div>
+
+<script src="../assets/js/demo.js"></script>
+<script>
+const admin = Demo.requireAdmin();
+if (admin) {
+  document.getElementById('sidebar').innerHTML = Demo.renderAdminSidebar(admin.name, 'dashboard.html');
+
+  function render() {
+    const queue = Demo.getUnverified().filter(u => u.emp_no).sort((a, b) => new Date(a.verify_submitted_at) - new Date(b.verify_submitted_at));
+    document.getElementById('subheading').textContent = `${queue.length} account${queue.length === 1 ? '' : 's'} waiting on your decision.`;
+
+    const area = document.getElementById('tableArea');
+    if (queue.length === 0) {
+      area.innerHTML = '<div class="empty-note">Nothing to review right now.</div>';
+      return;
+    }
+    area.innerHTML = `
+      <table class="admin-table">
+        <thead><tr><th>Name</th><th>Department</th><th>Employee No.</th><th>Submitted</th><th>Actions</th></tr></thead>
+        <tbody>
+          ${queue.map(q => `
+            <tr>
+              <td>${Demo.escapeHtml(q.name)}</td>
+              <td><span class="pill">${Demo.escapeHtml(q.department)}</span></td>
+              <td class="mono">${Demo.escapeHtml(q.emp_no)}</td>
+              <td class="mono" style="color:var(--muted);font-size:12.5px;">${Demo.fmtDateTime(q.verify_submitted_at)}</td>
+              <td>
+                <button class="mini-btn" onclick="viewDetails(${q.id})">View details</button>
+                <button class="mini-btn accept" onclick="doAction(${q.id}, 'accept')">Accept</button>
+                <button class="mini-btn reject" onclick="doAction(${q.id}, 'reject')">Reject</button>
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  }
+  render();
+
+  window.viewDetails = function (id) {
+    const row = Demo.getUnverified().find(u => u.id === id);
+    if (!row) return;
+    const fields = [
+      ['Name', row.name], ['Email', row.email], ['Phone', row.phone],
+      ['Employee No.', row.emp_no], ['DOB', row.dob],
+      ['Department', row.department], ['Role', row.role],
+      ['Submitted', Demo.fmtDateTime(row.verify_submitted_at)]
+    ];
+    document.getElementById('modalBody').innerHTML = fields.map(f =>
+      `<div class="row"><span class="k">${f[0]}</span><span>${Demo.escapeHtml(f[1] ?? '')}</span></div>`
+    ).join('');
+    document.getElementById('modalBackdrop').classList.add('show');
+  };
+  window.closeModal = function () { document.getElementById('modalBackdrop').classList.remove('show'); };
+
+  window.doAction = function (id, action) {
+    let reason = null;
+    if (action === 'reject') {
+      reason = prompt('Reason for rejection:', 'unknown identity');
+      if (reason === null) return;
+      if (reason.trim() === '') reason = 'unknown identity';
+    } else {
+      if (!confirm('Approve this user and grant access?')) return;
+    }
+
+    const list = Demo.getUnverified();
+    const row = list.find(u => u.id === id);
+    if (!row || !row.emp_no) { alert('User not found or not yet submitted for review.'); return; }
+
+    if (action === 'accept') {
+      const users = Demo.getUsers();
+      users.push({
+        id: Demo.nextId(users), name: row.name, email: row.email, phone: row.phone,
+        password: row.password, emp_no: row.emp_no, dob: row.dob,
+        department: row.department, role: row.role, hide_contact: 0, hide_email: 0
+      });
+      Demo.saveUsers(users);
+    } else {
+      const banned = Demo.getBanned();
+      banned.push({ name: row.name, email: row.email, phone: row.phone, emp_no: row.emp_no, dob: row.dob, department: row.department, role: row.role, reason, banned_at: new Date().toISOString() });
+      Demo.saveBanned(banned);
+    }
+    Demo.saveUnverified(list.filter(u => u.id !== id));
+    render();
+  };
+}
+</script>
+</body>
+</html>

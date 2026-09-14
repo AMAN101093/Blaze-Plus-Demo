@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Complaints · BlazePlus Admin</title>
+<link rel="stylesheet" href="../assets/css/style.css">
+</head>
+<body>
+<div class="app-shell">
+  <div class="sidebar" id="sidebar"></div>
+  <div class="main">
+    <div class="main-header">
+      <div>
+        <h1>Complaints</h1>
+        <div class="sub" id="subheading"></div>
+      </div>
+    </div>
+    <div id="listArea"></div>
+  </div>
+</div>
+
+<script src="../assets/js/demo.js"></script>
+<script>
+const admin = Demo.requireAdmin();
+if (admin) {
+  document.getElementById('sidebar').innerHTML = Demo.renderAdminSidebar(admin.name, 'complaints.html');
+
+  function render() {
+    const queue = Demo.getComplaints().filter(c => c.status === 'open').sort((a, b) => new Date(a.reported_at) - new Date(b.reported_at));
+    document.getElementById('subheading').textContent = `${queue.length} report${queue.length === 1 ? '' : 's'} waiting on your review.`;
+
+    const area = document.getElementById('listArea');
+    if (queue.length === 0) {
+      area.innerHTML = '<div class="empty-note">Nothing to review right now.</div>';
+      return;
+    }
+    area.innerHTML = queue.map(q => `
+      <div class="room-card" style="max-width:700px;margin-bottom:20px;">
+        <div class="tag">${q.message_type.toUpperCase()} · #${Demo.escapeHtml(q.room_key)}</div>
+        <div class="row"><span class="k">Reported</span> ${Demo.escapeHtml(q.reported_name)} (${Demo.escapeHtml(q.reported_emp_no)})</div>
+        <div class="row"><span class="k">Reported by</span> ${Demo.escapeHtml(q.reporter_name)} (${Demo.escapeHtml(q.reporter_emp_no)})</div>
+        <div class="row"><span class="k">Reason</span> ${Demo.escapeHtml(q.reason)}</div>
+        ${q.message_text ? `<div class="row"><span class="k">Message</span> ${Demo.escapeHtml(q.message_text)}</div>` : ''}
+        ${q.image_path ? `<div style="margin-top:8px;"><img src="${q.image_path}" style="max-width:220px;border-radius:8px;"></div>` : ''}
+        ${q.pdf_path ? `<div style="margin-top:8px;">📄 ${Demo.escapeHtml(q.pdf_path)}</div>` : ''}
+        <div class="row"><span class="k">Reported at</span> <span class="mono" style="color:var(--muted);font-size:12.5px;">${Demo.fmtDateTime(q.reported_at)}</span></div>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button class="mini-btn accept" onclick="doAction(${q.id}, 'resolve')">Resolve</button>
+          <button class="mini-btn" onclick="doAction(${q.id}, 'dismiss')">Dismiss</button>
+          <button class="mini-btn reject" onclick="doAction(${q.id}, 'delete_message')">Delete Message</button>
+        </div>
+      </div>`).join('');
+  }
+  render();
+
+  window.doAction = function (id, action) {
+    let confirmMsg = 'Mark this report as ' + action + '?';
+    if (action === 'delete_message') confirmMsg = 'Delete the reported message permanently? This also resolves the report.';
+    if (!confirm(confirmMsg)) return;
+
+    const list = Demo.getComplaints();
+    const idx = list.findIndex(c => c.id === id);
+    if (idx === -1) return;
+    list[idx] = { ...list[idx], status: (action === 'dismiss') ? 'dismissed' : 'resolved' };
+    Demo.saveComplaints(list);
+    render();
+  };
+}
+</script>
+</body>
+</html>
